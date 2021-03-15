@@ -1,0 +1,108 @@
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# create object for Infected population count matrix
+pos.data <- Read10X(data.dir = "pos_tsv")
+pos.object <- CreateSeuratObject(counts = pos.data, project = "Pos")
+pos.object
+
+# create object for Bystander population count matrix
+neg.data <- Read10X(data.dir = "neg_tsv")
+neg.object <- CreateSeuratObject(counts = neg.data, project = "Neg")
+neg.object
+
+# create object for Control population count matrix
+uni.data <- Read10X(data.dir = "uni_tsv")
+uni.object <- CreateSeuratObject(counts = uni.data, project = "Ctrl")
+uni.object
+
+# merge objects for aggregate analysis
+aggr.object <- merge(uni.object, y = c(pos.object, neg.object), add.cell.ids = c("Ctrl", "Pos", "Neg"), project = "aggr")
+aggr.object
+
+# calculate percentage of total transcripts from mt-genes
+aggr.object[["percent.mt"]] <- PercentageFeatureSet(aggr.object, pattern = "^MT-")
+
+# calculate percentage of total transcripts from rp-genes
+aggr.object[["percent.rp"]] <- PercentageFeatureSet(aggr.object, pattern = "^RP")
+
+# visualize aggr.object QC metrics as a violin plot
+VlnPlot(aggr.object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# Filter out low quality cells
+aggr.filt <- subset(x = aggr.object, 
+                   subset = (nFeature_RNA >= 200) &
+                     (nFeature_RNA <= 8000) & 
+                     (nCount_RNA >= 500) &
+                     (percent.mt < 30))
+
+# check population cell numbers
+table(aggr.filt$orig.ident)
+
+# visualize aggr.filt QC metrics as a violin plot
+VlnPlot(aggr.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# normalize data
+aggr.filt <- NormalizeData(aggr.filt, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# scale data
+aggr.filt <- ScaleData(object = aggr.filt, vars.to.regress = c("percent.rp", "percent.mt"))
+
+# find variable features, top 3000
+aggr.filt <- FindVariableFeatures(object = aggr.filt, selection.method = "vst", nfeatures = 3000)
+
+# run PCA and plot
+aggr.filt <- RunPCA(aggr.filt, verbose = FALSE)
+DimPlot(aggr.filt, reduction = 'pca', group.by = 'orig.ident')
+
+# determine dimensionality of data
+aggr.filt <- JackStraw(aggr.filt, num.replicate = 100)
+aggr.filt <- ScoreJackStraw(aggr.filt, dims = 1:20)
+JackStrawPlot(aggr.filt, dims = 1:20)
+
+# cluster cells
+aggr.filt <- FindNeighbors(aggr.filt, dims = 1:12, verbose = FALSE)
+aggr.filt <- FindClusters(aggr.filt, verbose = FALSE)
+
+# run tsne with X dims and plot
+aggr.filt <- RunTSNE(aggr.filt, dims = 1:12, verbose = FALSE)
+
+# plot tsne by clusters
+DimPlot(object = aggr.filt, reduction = 'tsne')
+
+# switch identity to population for dge
+Idents(object = aggr.filt) <- "orig.ident"
+
+# plot tsne by population
+DimPlot(object = aggr.filt, reduction = 'tsne')
+
+# upload gene list
+final.list <- c("IL18", "CSF2", "IL1B", "IL2", "IL6", "IL5", "IL12A", "TNF", "CCL11", "CXCL12", "CXCL1", "IFNG", "CCL2", "CXCL10", "CCL4", "CCL3", "IL8", "CCL5", "IL4", "IL13", "AKT1", "BCL2", "TP53", "CASP8", "BAD", "CASP9", "MAPK8")
+
+# order levels for heatmapping
+level_order <- c("Pos", "Neg", "Ctrl")
+
+aggr.filt@active.ident <- factor(x = aggr.filt@active.ident, levels = level_order)
+
+# create expression heatamp by population
+DoHeatmap(aggr.filt, features = final.list)
+
+# find marker genes between populations
+aggr.gene.markers <- FindAllMarkers(aggr.filt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+# subset marker genes to include top 10 per population [here (cluster = population) because of switched idents]
+aggr.top10 <- aggr.gene.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+# plot differentially expressed genes in heatmap
+DoHeatmap(aggr.filt, features = aggr.top10$gene)
+
+# vlnplot with some of top dge from panel
+VlnPlot(aggr.filt, features = c("IL18", "CCL5", "BCL2", "AKT1", "CASP8", "BAD"))
+
+# doptlot representation of panel genes
+level_order_rev <- c("Ctrl", "Neg", "Pos")
+
+aggr.filt@active.ident <- factor(x = aggr.filt@active.ident, levels = level_order_rev)
+
+DotPlot(aggr.filt, features = final.list) + theme(axis.text.x = element_text(angle = 90)) + theme(axis.title.x=element_blank()) + theme(axis.title.y=element_blank())

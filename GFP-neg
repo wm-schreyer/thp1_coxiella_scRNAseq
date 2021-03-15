@@ -1,0 +1,127 @@
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# create object for Infected population count matrix
+neg.data <- Read10X(data.dir = "neg_tsv")
+neg.object <- CreateSeuratObject(counts = neg.data, project = "Neg")
+neg.object
+
+# calculate percentage of total transcripts from mt-genes
+neg.object[["percent.mt"]] <- PercentageFeatureSet(neg.object, pattern = "^MT-")
+
+# calculate percentage of total transcripts from rp-genes
+neg.object[["percent.rp"]] <- PercentageFeatureSet(neg.object, pattern = "^RP")
+
+# visualize aggr.object QC metrics as a violin plot
+VlnPlot(neg.object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# Filter out low quality cells
+neg.filt <- subset(x = neg.object, 
+                   subset = (nFeature_RNA >= 200) &
+                     (nFeature_RNA <= 8000) & 
+                     (nCount_RNA >= 500) &
+                     (percent.mt < 30))
+
+# check population cell numbers
+table(neg.filt$orig.ident)
+
+# visualize aggr.filt QC metrics as a violin plot
+VlnPlot(neg.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# normalize data
+neg.filt <- NormalizeData(neg.filt, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# scale data
+neg.filt <- ScaleData(object = neg.filt, vars.to.regress = c("percent.rp", "percent.mt"))
+
+# find variable features, top 3000
+neg.filt <- FindVariableFeatures(object = neg.filt, selection.method = "vst", nfeatures = 3000)
+
+# run PCA and plot
+neg.filt <- RunPCA(neg.filt, verbose = FALSE)
+DimPlot(neg.filt, reduction = 'pca')
+
+# determine dimensionality of data
+neg.filt <- JackStraw(neg.filt, num.replicate = 100)
+neg.filt <- ScoreJackStraw(neg.filt, dims = 1:20)
+JackStrawPlot(neg.filt, dims = 1:20)
+
+# cluster cells
+neg.filt <- FindNeighbors(neg.filt, dims = 1:8, verbose = FALSE)
+neg.filt <- FindClusters(neg.filt, verbose = FALSE)
+
+# run umap with 8 dims and plot
+neg.filt <- RunTSNE(neg.filt, dims = 1:8, verbose = FALSE)
+
+# plot umap by clusters
+DimPlot(object = neg.filt, reduction = 'tsne')
+
+# upload gene list
+final.list <- c("IL18", "CSF2", "IL1B", "IL2", "IL6", "IL5", "IL12A", "TNF", "CCL11", "CXCL12", "CXCL1", "IFNG", "CCL2", "CXCL10", "CCL4", "CCL3", "IL8", "CCL5", "IL4", "IL13", "AKT1", "BCL2", "TP53", "CASP8", "BAD", "CASP9", "MAPK8")
+
+# create expression heatamp by cluster
+DoHeatmap(neg.filt, features = final.list)
+
+# find marker genes for all clusters
+gene.markers.neg <- FindAllMarkers(neg.filt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+# subset marker genes to include top 10 per cluster
+top10.neg <- gene.markers.neg %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+# plot differentially expressed genes in heatmap
+DoHeatmap(neg.filt, features = top10.neg$gene)
+
+# vlnplot with some of top dge from panel
+VlnPlot(neg.filt, features = c("IL18", "CCL5", "AKT1", "CASP8", "BAD"))
+
+# doptlot representation of panel genes
+DotPlot(neg.filt, features = final.list) + theme(axis.text.x = element_text(angle = 90)) + theme(axis.title.x=element_blank()) + theme(axis.title.y=element_blank())
+
+# output dge data for cluster 0
+neg.dge.cluster0 <- FindMarkers(neg.filt, ident.1 = "0", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster0, file = "neg.dge.cluster0.csv")
+
+# output dge data for cluster 1
+neg.dge.cluster1 <- FindMarkers(neg.filt, ident.1 = "1", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster1, file = "neg.dge.cluster1.csv")
+
+# output dge data for cluster 2
+neg.dge.cluster2 <- FindMarkers(neg.filt, ident.1 = "2", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster2, file = "neg.dge.cluster2.csv")
+
+# output dge data for cluster 3
+neg.dge.cluster3 <- FindMarkers(neg.filt, ident.1 = "3", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster3, file = "neg.dge.cluster3.csv")
+
+# output dge data for cluster 4
+neg.dge.cluster4 <- FindMarkers(neg.filt, ident.1 = "4", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster4, file = "neg.dge.cluster4.csv")
+
+# output dge data for cluster 5
+neg.dge.cluster5 <- FindMarkers(neg.filt, ident.1 = "5", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster5, file = "neg.dge.cluster5.csv")
+
+# output dge data for cluster 6
+neg.dge.cluster6 <- FindMarkers(neg.filt, ident.1 = "6", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster6, file = "neg.dge.cluster6.csv")
+
+# output dge data for cluster 7
+neg.dge.cluster7 <- FindMarkers(neg.filt, ident.1 = "7", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(neg.dge.cluster7, file = "neg.dge.cluster7.csv")

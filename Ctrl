@@ -1,0 +1,121 @@
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# create object for Control population count matrix
+uni.data <- Read10X(data.dir = "uni_tsv")
+ctrl.object <- CreateSeuratObject(counts = uni.data, project = "Ctrl")
+ctrl.object
+
+# calculate percentage of total transcripts from mt-genes
+ctrl.object[["percent.mt"]] <- PercentageFeatureSet(ctrl.object, pattern = "^MT-")
+
+# calculate percentage of total transcripts from rp-genes
+ctrl.object[["percent.rp"]] <- PercentageFeatureSet(ctrl.object, pattern = "^RP")
+
+# visualize aggr.object QC metrics as a violin plot
+VlnPlot(ctrl.object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# Filter out low quality cells
+ctrl.filt <- subset(x = ctrl.object, 
+                   subset = (nFeature_RNA >= 200) &
+                     (nFeature_RNA <= 8000) & 
+                     (nCount_RNA >= 500) &
+                     (percent.mt < 30))
+
+# check population cell numbers
+table(ctrl.filt$orig.ident)
+
+# visualize aggr.filt QC metrics as a violin plot
+VlnPlot(ctrl.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# normalize data
+ctrl.filt <- NormalizeData(ctrl.filt, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# scale data
+ctrl.filt <- ScaleData(object = ctrl.filt, vars.to.regress = c("percent.rp", "percent.mt"))
+
+# find variable features, top 3000
+ctrl.filt <- FindVariableFeatures(object = ctrl.filt, selection.method = "vst", nfeatures = 3000)
+
+# run PCA and plot
+ctrl.filt <- RunPCA(ctrl.filt, verbose = FALSE)
+DimPlot(ctrl.filt, reduction = 'pca')
+
+# determine dimensionality of data
+ctrl.filt <- JackStraw(ctrl.filt, num.replicate = 100)
+ctrl.filt <- ScoreJackStraw(ctrl.filt, dims = 1:20)
+JackStrawPlot(ctrl.filt, dims = 1:20)
+
+# cluster cells
+ctrl.filt <- FindNeighbors(ctrl.filt, dims = 1:6, verbose = FALSE)
+ctrl.filt <- FindClusters(ctrl.filt, verbose = FALSE)
+
+# run umap with 6 dims and plot
+ctrl.filt <- RunTSNE(ctrl.filt, dims = 1:6, verbose = FALSE)
+
+# plot umap by clusters
+DimPlot(object = ctrl.filt, reduction = 'tsne')
+
+# upload gene list
+final.list <- c("IL18", "CSF2", "IL1B", "IL2", "IL6", "IL5", "IL12A", "TNF", "CCL11", "CXCL12", "CXCL1", "IFNG", "CCL2", "CXCL10", "CCL4", "CCL3", "IL8", "CCL5", "IL4", "IL13", "AKT1", "BCL2", "TP53", "CASP8", "BAD", "CASP9", "MAPK8")
+
+# create expression heatamp by cluster
+DoHeatmap(ctrl.filt, features = final.list)
+
+# find marker genes for all clusters
+gene.markers.ctrl <- FindAllMarkers(ctrl.filt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+# subset marker genes to include top 10 per cluster
+top10.ctrl <- gene.markers.ctrl %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+# plot differentially expressed genes in heatmap
+DoHeatmap(ctrl.filt, features = top10.ctrl$gene)
+
+# vlnplot with some of top dge from panel
+VlnPlot(ctrl.filt, features = c("IL18", "CCL5", "AKT1", "CASP8", "BAD"))
+
+# doptlot representation of panel genes
+DotPlot(ctrl.filt, features = final.list) + theme(axis.text.x = element_text(angle = 90)) + theme(axis.title.x=element_blank()) + theme(axis.title.y=element_blank())
+
+# output dge data for cluster 0
+ctrl.dge.cluster0 <- FindMarkers(ctrl.filt, ident.1 = "0", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster0, file = "ctrl.dge.cluster0.csv")
+
+# output dge data for cluster 1
+ctrl.dge.cluster1 <- FindMarkers(ctrl.filt, ident.1 = "1", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster1, file = "ctrl.dge.cluster1.csv")
+
+# output dge data for cluster 2
+ctrl.dge.cluster2 <- FindMarkers(ctrl.filt, ident.1 = "2", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster2, file = "ctrl.dge.cluster2.csv")
+
+# output dge data for cluster 3
+ctrl.dge.cluster3 <- FindMarkers(ctrl.filt, ident.1 = "3", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster3, file = "ctrl.dge.cluster3.csv")
+
+# output dge data for cluster 4
+ctrl.dge.cluster4 <- FindMarkers(ctrl.filt, ident.1 = "4", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster4, file = "ctrl.dge.cluster4.csv")
+
+# output dge data for cluster 5
+ctrl.dge.cluster5 <- FindMarkers(ctrl.filt, ident.1 = "5", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster5, file = "ctrl.dge.cluster5.csv")
+
+# output dge data for cluster 6
+ctrl.dge.cluster6 <- FindMarkers(ctrl.filt, ident.1 = "6", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(ctrl.dge.cluster6, file = "ctrl.dge.cluster6.csv")

@@ -1,0 +1,109 @@
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# create object for Infected population count matrix
+pos.data <- Read10X(data.dir = "pos_tsv")
+pos.object <- CreateSeuratObject(counts = pos.data, project = "Pos")
+pos.object
+
+# calculate percentage of total transcripts from mt-genes
+pos.object[["percent.mt"]] <- PercentageFeatureSet(pos.object, pattern = "^MT-")
+
+# calculate percentage of total transcripts from rp-genes
+pos.object[["percent.rp"]] <- PercentageFeatureSet(pos.object, pattern = "^RP")
+
+# visualize aggr.object QC metrics as a violin plot
+VlnPlot(pos.object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# Filter out low quality cells
+pos.filt <- subset(x = pos.object, 
+                   subset = (nFeature_RNA >= 200) &
+                     (nFeature_RNA <= 8000) & 
+                     (nCount_RNA >= 500) &
+                     (percent.mt < 30))
+
+# check population cell numbers
+table(pos.filt$orig.ident)
+
+# visualize aggr.filt QC metrics as a violin plot
+VlnPlot(pos.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, pt.size = 0.5)
+
+# normalize data
+pos.filt <- NormalizeData(pos.filt, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# scale data
+pos.filt <- ScaleData(object = pos.filt, vars.to.regress = c("percent.rp", "percent.mt"))
+
+# find variable features, top 3000
+pos.filt <- FindVariableFeatures(object = pos.filt, selection.method = "vst", nfeatures = 3000)
+
+# run PCA and plot
+pos.filt <- RunPCA(pos.filt, verbose = FALSE)
+DimPlot(pos.filt, reduction = 'pca')
+
+# determine dimensionality of data
+pos.filt <- JackStraw(pos.filt, num.replicate = 100)
+pos.filt <- ScoreJackStraw(pos.filt, dims = 1:20)
+JackStrawPlot(pos.filt, dims = 1:20)
+
+# cluster cells
+pos.filt <- FindNeighbors(pos.filt, dims = 1:9, verbose = FALSE)
+pos.filt <- FindClusters(pos.filt, verbose = FALSE)
+
+# run umap with 40 dims and plot
+pos.filt <- RunTSNE(pos.filt, dims = 1:9, verbose = FALSE)
+
+# plot umap by clusters
+DimPlot(object = pos.filt, reduction = 'tsne')
+
+# upload gene list
+final.list <- c("IL18", "CSF2", "IL1B", "IL2", "IL6", "IL5", "IL12A", "TNF", "CCL11", "CXCL12", "CXCL1", "IFNG", "CCL2", "CXCL10", "CCL4", "CCL3", "IL8", "CCL5", "IL4", "IL13", "AKT1", "BCL2", "TP53", "CASP8", "BAD", "CASP9", "MAPK8")
+
+# create expression heatamp by cluster
+DoHeatmap(pos.filt, features = final.list)
+
+# find marker genes for all clusters
+gene.markers <- FindAllMarkers(pos.filt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+# subset marker genes to include top 10 per cluster
+top10 <- gene.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+# plot differentially expressed genes in heatmap
+DoHeatmap(pos.filt, features = top10$gene)
+
+# vlnplot with some of top dge from panel
+VlnPlot(pos.filt, features = c("IL18", "CCL5", "AKT1", "CASP8", "BAD"))
+
+# doptlot representation of panel genes
+DotPlot(pos.filt, features = final.list) + theme(axis.text.x = element_text(angle = 90))
+
+# output dge data for cluster 0
+pos.dge.cluster0 <- FindMarkers(pos.filt, ident.1 = "0", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(pos.dge.cluster0, file = "pos.dge.cluster0.csv")
+
+# output dge data for cluster 1
+pos.dge.cluster1 <- FindMarkers(pos.filt, ident.1 = "1", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(pos.dge.cluster1, file = "pos.dge.cluster1.csv")
+
+# output dge data for cluster 2
+pos.dge.cluster2 <- FindMarkers(pos.filt, ident.1 = "2", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(pos.dge.cluster2, file = "pos.dge.cluster2.csv")
+
+# output dge data for cluster 3
+pos.dge.cluster3 <- FindMarkers(pos.filt, ident.1 = "3", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(pos.dge.cluster3, file = "pos.dge.cluster3.csv")
+
+# output dge data for cluster 4
+pos.dge.cluster4 <- FindMarkers(pos.filt, ident.1 = "4", ident.2 = NULL, logfc.threshold = 0.01)
+
+# output dge data as csv file
+write.csv(pos.dge.cluster4, file = "pos.dge.cluster4.csv")
